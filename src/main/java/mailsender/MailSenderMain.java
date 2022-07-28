@@ -2,9 +2,12 @@ package mailsender;
 
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import javax.activation.DataHandler;
@@ -18,7 +21,7 @@ public class MailSenderMain {
 
     public static void main(String[] args) {
 
-        logger.info("args:" + Arrays.toString(args));
+        //logger.info("args:" + Arrays.toString(args));
 
         try {
             MailParams mailParams = prepareMailParamFromArgs(args);
@@ -29,7 +32,51 @@ public class MailSenderMain {
         }
     }
 
-    private static MailParams prepareMailParamFromArgs(String[] args) {
+    private static MailParams prepareMailParamFromArgs(String[] args) throws IOException {
+
+        Map<String, String> argsMapFromCmd = argsArrToMap(args);
+        logger.info("Commandline Args:" + Arrays.toString(args));
+
+        //argsmap içinde param-file varsa, dosyadan line line args arrayine oradan da mape aktarılır.
+        String paramFileFullPath=argsMapFromCmd.get("param-file");
+        if(StringUtils.isNotEmpty(paramFileFullPath) ) {
+            List<String> lines = FileUtils.readLines(new File(paramFileFullPath), StandardCharsets.UTF_8);
+            logger.info("File Args:" + Arrays.toString(lines.toArray(new String[0])));
+            Map<String, String> argsMapFromFile = argsArrToMap(lines.toArray(new String[0]));
+
+            argsMapFromFile.putAll(argsMapFromCmd);
+            argsMapFromCmd=argsMapFromFile;
+        }
+
+
+        MailParams mailParams = new MailParams();
+        mailParams.subject = argsMapFromCmd.get("subject");
+        mailParams.content = argsMapFromCmd.get("content");
+        mailParams.toEmails = Arrays.asList(argsMapFromCmd.get("to-emails").split(","));
+        if (StringUtils.isNotEmpty(argsMapFromCmd.get("attachments")))
+            mailParams.attachmentFullPaths = Arrays.asList(argsMapFromCmd.get("attachments").split(","));
+
+        if (StringUtils.isNotEmpty(argsMapFromCmd.get("from")))
+            mailParams.from = argsMapFromCmd.get("from");
+
+        if (StringUtils.isNotEmpty(argsMapFromCmd.get("auth")))
+            mailParams.auth = argsMapFromCmd.get("auth");
+
+        if (StringUtils.isNotEmpty(argsMapFromCmd.get("starttls")))
+            mailParams.starttls = argsMapFromCmd.get("starttls");
+
+        mailParams.host = argsMapFromCmd.get("host");
+        mailParams.port = Integer.parseInt(argsMapFromCmd.get("port"));
+        mailParams.username = argsMapFromCmd.get("username");
+        mailParams.password = argsMapFromCmd.get("password");
+
+        if (StringUtils.isNotEmpty(argsMapFromCmd.get("html")))
+            mailParams.html = Boolean.parseBoolean(argsMapFromCmd.get("html"));
+
+        return mailParams;
+    }
+
+    private static Map<String, String> argsArrToMap(String[] args) {
         Map<String, String> argsMap = new HashMap<>();
 
         for (String arg : args) {
@@ -37,36 +84,13 @@ public class MailSenderMain {
                 logger.error("Argument format must be arg=value Arg: " + arg + " is wrong format");
                 System.exit(3);
             }
-            String[] argKeyValue = arg.split("=");
-            argsMap.put(argKeyValue[0], argKeyValue[1]);
+            String[] argKeyValue = arg.split("=",2);
+            String value=argKeyValue[1].trim();
+            if(value.startsWith("\"") && value.endsWith("\""))
+                value= value.substring(1, value.length()-1);
+            argsMap.put(argKeyValue[0],value );
         }
-
-
-        MailParams mailParams = new MailParams();
-        mailParams.subject = argsMap.get("subject");
-        mailParams.content = argsMap.get("content");
-        mailParams.toEmails = Arrays.asList(argsMap.get("to-emails").split(","));
-        if (StringUtils.isNotEmpty(argsMap.get("attachments")))
-            mailParams.attachmentFullPaths = Arrays.asList(argsMap.get("attachments").split(","));
-
-        if (StringUtils.isNotEmpty(argsMap.get("from")))
-            mailParams.from = argsMap.get("from");
-
-        if (StringUtils.isNotEmpty(argsMap.get("auth")))
-            mailParams.auth = argsMap.get("auth");
-
-        if (StringUtils.isNotEmpty(argsMap.get("starttls")))
-            mailParams.starttls = argsMap.get("starttls");
-
-        mailParams.host = argsMap.get("host");
-        mailParams.port = Integer.parseInt(argsMap.get("port"));
-        mailParams.username = argsMap.get("username");
-        mailParams.password = argsMap.get("password");
-
-        if (StringUtils.isNotEmpty(argsMap.get("html")))
-            mailParams.html = Boolean.parseBoolean(argsMap.get("html"));
-
-        return mailParams;
+        return argsMap;
     }
 
     public static void send(MailParams mailParam) throws MessagingException {
